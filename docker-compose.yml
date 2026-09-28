@@ -1,3 +1,4 @@
+
 services:
 
   mysql:
@@ -5,11 +6,10 @@ services:
     container_name: cicd-demo-mysql
 
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-cicd_demo}
+      MYSQL_USER: ${MYSQL_USER:-cicduser}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-cicdpassword}
 
     volumes:
       - mysql_data:/var/lib/mysql
@@ -25,7 +25,7 @@ services:
           "localhost",
           "-u",
           "root",
-          "-p${MYSQL_ROOT_PASSWORD}"
+          "-p${MYSQL_ROOT_PASSWORD:-rootpassword}"
         ]
       interval: 10s
       timeout: 5s
@@ -40,7 +40,7 @@ services:
     build:
       context: ./backend
 
-    image: cicd-demo-backend:${APP_VERSION}
+    image: cicd-demo-backend:${APP_VERSION:-1.0}
 
     container_name: cicd-demo-backend
 
@@ -48,9 +48,9 @@ services:
       PORT: 5000
       DB_HOST: mysql
       DB_PORT: 3306
-      DB_USER: ${MYSQL_USER}
-      DB_PASSWORD: ${MYSQL_PASSWORD}
-      DB_NAME: ${MYSQL_DATABASE}
+      DB_USER: ${MYSQL_USER:-cicduser}
+      DB_PASSWORD: ${MYSQL_PASSWORD:-cicdpassword}
+      DB_NAME: ${MYSQL_DATABASE:-cicd_demo}
 
     ports:
       - "5000:5000"
@@ -82,7 +82,7 @@ services:
     build:
       context: ./frontend
 
-    image: cicd-demo-frontend:${APP_VERSION}
+    image: cicd-demo-frontend:${APP_VERSION:-1.0}
 
     container_name: cicd-demo-frontend
 
