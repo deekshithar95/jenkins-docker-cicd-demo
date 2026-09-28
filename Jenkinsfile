@@ -173,7 +173,7 @@ pipeline {
 
 
         // ============================================================
-        // 5. TRIVY SECURITY SCAN  (FIXED)
+        // 5. TRIVY SECURITY SCAN
         // ============================================================
         stage('Trivy Security Scan') {
             steps {
@@ -536,7 +536,76 @@ pipeline {
 
 
         // ============================================================
-        // 11. FINAL STATUS
+        // 11. DOCKER IMAGE CLEANUP  (NEW)
+        //
+        // Runs only after a successful deployment + health check.
+        // ============================================================
+        stage('Docker Image Cleanup') {
+            steps {
+                echo '=========================================='
+                echo '          DOCKER IMAGE CLEANUP'
+                echo '=========================================='
+
+                bat '''
+                @echo off
+
+                echo.
+                echo ===== DISK USAGE BEFORE CLEANUP =====
+
+                docker system df
+
+                echo.
+                echo ===== REMOVING OLD BACKEND BUILD TAGS =====
+
+                for /f "delims=" %%t in ('docker images %BACKEND_REPO% --format "{{.Repository}}:{{.Tag}}"') do (
+                    if not "%%t"=="%BACKEND_REPO%:latest" (
+                        if not "%%t"=="%BACKEND_REPO%:%IMAGE_TAG%" (
+                            echo Removing %%t
+                            docker rmi %%t
+                        )
+                    )
+                )
+
+                echo.
+                echo ===== REMOVING OLD FRONTEND BUILD TAGS =====
+
+                for /f "delims=" %%t in ('docker images %FRONTEND_REPO% --format "{{.Repository}}:{{.Tag}}"') do (
+                    if not "%%t"=="%FRONTEND_REPO%:latest" (
+                        if not "%%t"=="%FRONTEND_REPO%:%IMAGE_TAG%" (
+                            echo Removing %%t
+                            docker rmi %%t
+                        )
+                    )
+                )
+
+                echo.
+                echo ===== REMOVING DANGLING IMAGES =====
+
+                docker image prune -f
+
+                echo.
+                echo ===== REMOVING UNUSED BUILD CACHE =====
+
+                docker builder prune -f
+
+                echo.
+                echo ===== DISK USAGE AFTER CLEANUP =====
+
+                docker system df
+
+                echo.
+                echo ==========================================
+                echo Docker image cleanup completed.
+                echo ==========================================
+
+                exit /b 0
+                '''
+            }
+        }
+
+
+        // ============================================================
+        // 12. FINAL STATUS
         // ============================================================
         stage('Final Status') {
             steps {
@@ -617,6 +686,7 @@ pipeline {
             echo 'Docker images pushed.'
             echo 'Application deployed.'
             echo 'Health checks passed.'
+            echo 'Old Docker images cleaned up.'
         }
 
 
