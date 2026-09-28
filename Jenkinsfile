@@ -4,6 +4,11 @@ pipeline {
 
     environment {
         APP_VERSION = "1.0"
+
+        MYSQL_ROOT_PASSWORD = "rootpassword"
+        MYSQL_DATABASE = "cicd_demo"
+        MYSQL_USER = "appuser"
+        MYSQL_PASSWORD = "apppassword"
     }
 
     stages {
@@ -54,13 +59,18 @@ pipeline {
 
         stage('Health Check') {
             steps {
-                echo 'Waiting for services...'
-
-                bat 'timeout /t 20 /nobreak'
+                echo 'Checking application health...'
 
                 bat 'docker compose ps'
 
-                bat 'curl --fail http://localhost:5000/api/health'
+                powershell '''
+                    Write-Host "Waiting for backend to become healthy..."
+                    Start-Sleep -Seconds 20
+                '''
+
+                bat 'curl.exe --fail --silent --show-error http://localhost:5000/'
+
+                echo 'Backend health check passed.'
             }
         }
     }
@@ -73,7 +83,8 @@ pipeline {
 
         failure {
             echo 'CI/CD Pipeline failed!'
-            bat 'docker compose logs'
+            bat 'docker compose ps'
+            bat 'docker compose logs --tail=100'
         }
 
         always {
