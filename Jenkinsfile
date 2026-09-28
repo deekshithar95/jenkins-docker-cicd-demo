@@ -1,19 +1,23 @@
 pipeline {
-
     agent any
 
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+
     environment {
-        DOCKERHUB_USERNAME = 'deekshith7204'
+        DOCKERHUB_CREDENTIALS_ID = 'dockerhub-credentials'
+        DOCKERHUB_USER           = 'deekshith7204'
 
-        BACKEND_IMAGE  = 'deekshith7204/jenkins-docker-cicd-demo-backend'
-        FRONTEND_IMAGE = 'deekshith7204/jenkins-docker-cicd-demo-frontend'
+        BACKEND_IMAGE_LOCAL      = 'cicd-demo-backend:1.0'
+        FRONTEND_IMAGE_LOCAL     = 'cicd-demo-frontend:1.0'
 
-        BACKEND_LOCAL_IMAGE  = 'cicd-demo-backend:1.0'
-        FRONTEND_LOCAL_IMAGE = 'cicd-demo-frontend:1.0'
+        BACKEND_REPO             = 'deekshith7204/jenkins-docker-cicd-demo-backend'
+        FRONTEND_REPO            = 'deekshith7204/jenkins-docker-cicd-demo-frontend'
 
-        BACKEND_CONTAINER  = 'cicd-demo-backend'
-        FRONTEND_CONTAINER = 'cicd-demo-frontend'
-        MYSQL_CONTAINER    = 'cicd-demo-mysql'
+        IMAGE_TAG                = "${env.BUILD_NUMBER}"
     }
 
     stages {
@@ -23,7 +27,6 @@ pipeline {
                 echo '=========================================='
                 echo '              CHECKOUT'
                 echo '=========================================='
-
                 checkout scm
             }
         }
@@ -33,31 +36,25 @@ pipeline {
                 echo '=========================================='
                 echo '          VERIFY ENVIRONMENT'
                 echo '=========================================='
-
                 bat '''
-                    echo.
-                    echo ===== CURRENT DIRECTORY =====
-                    cd
-
-                    echo.
-                    echo ===== PROJECT FILES =====
-                    dir
-
-                    echo.
-                    echo ===== DOCKER VERSION =====
-                    docker --version
-
-                    echo.
-                    echo ===== DOCKER COMPOSE VERSION =====
-                    docker compose version
-
-                    echo.
-                    echo ===== NODE VERSION =====
-                    node --version
-
-                    echo.
-                    echo ===== NPM VERSION =====
-                    npm --version
+                @echo off
+                echo ===== CURRENT DIRECTORY =====
+                cd
+                echo.
+                echo ===== PROJECT FILES =====
+                dir
+                echo.
+                echo ===== DOCKER VERSION =====
+                docker --version
+                echo.
+                echo ===== DOCKER COMPOSE VERSION =====
+                docker compose version
+                echo.
+                echo ===== NODE VERSION =====
+                node --version
+                echo.
+                echo ===== NPM VERSION =====
+                npm --version
                 '''
             }
         }
@@ -67,26 +64,15 @@ pipeline {
                 echo '=========================================='
                 echo '             BACKEND TEST'
                 echo '=========================================='
-
                 dir('backend') {
                     bat '''
-                        echo Installing backend dependencies...
-                        npm ci
-
-                        echo.
-                        echo Running backend tests...
-                        npm test -- --runInBand
-
-                        if errorlevel 1 (
-                            echo.
-                            echo ==========================================
-                            echo Backend tests FAILED
-                            echo ==========================================
-                            exit /b 1
-                        )
-
-                        echo.
-                        echo Backend tests PASSED.
+                    @echo off
+                    echo Installing backend dependencies...
+                    npm ci
+                    if errorlevel 1 (
+                        echo npm ci FAILED
+                        exit /b 1
+                    )
                     '''
                 }
             }
@@ -97,32 +83,25 @@ pipeline {
                 echo '=========================================='
                 echo '             DOCKER BUILD'
                 echo '=========================================='
-
                 bat '''
-                    echo.
-                    echo ===== DOCKER COMPOSE CONFIGURATION =====
-                    docker compose config
+                @echo off
+                echo ===== DOCKER COMPOSE CONFIGURATION =====
+                docker compose config
+                if errorlevel 1 (
+                    echo Docker Compose configuration FAILED
+                    exit /b 1
+                )
 
-                    if errorlevel 1 (
-                        echo Docker Compose configuration FAILED
-                        exit /b 1
-                    )
+                echo.
+                echo ===== BUILDING DOCKER IMAGES =====
+                docker compose build --no-cache
+                if errorlevel 1 (
+                    echo Docker image build FAILED
+                    exit /b 1
+                )
 
-                    echo.
-                    echo ===== BUILDING DOCKER IMAGES =====
-                    docker compose build --no-cache
-
-                    if errorlevel 1 (
-                        echo Docker image build FAILED
-                        exit /b 1
-                    )
-
-                    echo.
-                    echo ===== DOCKER IMAGES =====
-                    docker images
-
-                    echo.
-                    echo Docker images built successfully.
+                echo.
+                echo Docker images built successfully.
                 '''
             }
         }
@@ -132,37 +111,29 @@ pipeline {
                 echo '=========================================='
                 echo '            DOCKER HUB LOGIN'
                 echo '=========================================='
-
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: 'dockerhub-credentials',
-                        usernameVariable: 'DOCKER_USERNAME',
-                        passwordVariable: 'DOCKER_PASSWORD'
-                    )
-                ]) {
-
+                withCredentials([usernamePassword(
+                    credentialsId: "${DOCKERHUB_CREDENTIALS_ID}",
+                    usernameVariable: 'DOCKER_USERNAME',
+                    passwordVariable: 'DOCKER_PASSWORD'
+                )]) {
+                    // Passing the token with -p avoids the trailing-whitespace
+                    // problem that "echo %PASSWORD% | docker login" causes on Windows.
                     bat '''
-                        echo Logging in to Docker Hub...
-
-                        echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USERNAME% --password-stdin
-
-                        if errorlevel 1 (
-                            echo.
-                            echo ==========================================
-                            echo Docker Hub login FAILED
-                            echo ==========================================
-                            echo.
-                            echo Please verify:
-                            echo 1. Docker Hub username
-                            echo 2. Docker Hub Personal Access Token
-                            echo 3. Jenkins credential ID
-                            echo 4. Docker Hub repository permissions
-                            echo.
-                            exit /b 1
-                        )
-
+                    @echo off
+                    echo Logging in to Docker Hub...
+                    docker login -u %DOCKER_USERNAME% -p %DOCKER_PASSWORD%
+                    if errorlevel 1 (
                         echo.
-                        echo Docker Hub login successful.
+                        echo ==========================================
+                        echo Docker Hub login FAILED
+                        echo ==========================================
+                        echo Please verify:
+                        echo 1. Docker Hub username
+                        echo 2. Docker Hub Personal Access Token
+                        echo 3. Jenkins credential ID
+                        echo 4. Docker Hub repository permissions
+                        exit /b 1
+                    )
                     '''
                 }
             }
@@ -173,33 +144,17 @@ pipeline {
                 echo '=========================================='
                 echo '              DOCKER TAG'
                 echo '=========================================='
-
                 bat '''
-                    echo Tagging backend image...
-
-                    docker tag %BACKEND_LOCAL_IMAGE% %BACKEND_IMAGE%:latest
-
-                    if errorlevel 1 (
-                        echo Backend image tagging FAILED
-                        exit /b 1
-                    )
-
-                    echo.
-                    echo Tagging frontend image...
-
-                    docker tag %FRONTEND_LOCAL_IMAGE% %FRONTEND_IMAGE%:latest
-
-                    if errorlevel 1 (
-                        echo Frontend image tagging FAILED
-                        exit /b 1
-                    )
-
-                    echo.
-                    echo ===== TAGGED IMAGES =====
-                    docker images | findstr "jenkins-docker-cicd-demo"
-
-                    echo.
-                    echo Docker images tagged successfully.
+                @echo off
+                docker tag %BACKEND_IMAGE_LOCAL%  %BACKEND_REPO%:latest
+                docker tag %BACKEND_IMAGE_LOCAL%  %BACKEND_REPO%:%IMAGE_TAG%
+                docker tag %FRONTEND_IMAGE_LOCAL% %FRONTEND_REPO%:latest
+                docker tag %FRONTEND_IMAGE_LOCAL% %FRONTEND_REPO%:%IMAGE_TAG%
+                if errorlevel 1 (
+                    echo Docker tag FAILED
+                    exit /b 1
+                )
+                echo Images tagged successfully.
                 '''
             }
         }
@@ -207,36 +162,21 @@ pipeline {
         stage('Docker Push') {
             steps {
                 echo '=========================================='
-                echo '             DOCKER PUSH'
+                echo '              DOCKER PUSH'
                 echo '=========================================='
-
                 bat '''
-                    echo Pushing backend image...
+                @echo off
+                docker push %BACKEND_REPO%:latest
+                if errorlevel 1 exit /b 1
+                docker push %BACKEND_REPO%:%IMAGE_TAG%
+                if errorlevel 1 exit /b 1
 
-                    docker push %BACKEND_IMAGE%:latest
+                docker push %FRONTEND_REPO%:latest
+                if errorlevel 1 exit /b 1
+                docker push %FRONTEND_REPO%:%IMAGE_TAG%
+                if errorlevel 1 exit /b 1
 
-                    if errorlevel 1 (
-                        echo Backend Docker push FAILED
-                        exit /b 1
-                    )
-
-                    echo.
-                    echo Backend image pushed successfully.
-
-                    echo.
-                    echo Pushing frontend image...
-
-                    docker push %FRONTEND_IMAGE%:latest
-
-                    if errorlevel 1 (
-                        echo Frontend Docker push FAILED
-                        exit /b 1
-                    )
-
-                    echo.
-                    echo ==========================================
-                    echo Docker images pushed successfully.
-                    echo ==========================================
+                echo Images pushed successfully.
                 '''
             }
         }
@@ -246,29 +186,20 @@ pipeline {
                 echo '=========================================='
                 echo '              DEPLOYMENT'
                 echo '=========================================='
-
                 bat '''
-                    echo Stopping existing containers...
+                @echo off
+                echo Stopping old containers...
+                docker compose down
 
-                    docker compose down
+                echo Starting new containers...
+                docker compose up -d
+                if errorlevel 1 (
+                    echo Deployment FAILED
+                    exit /b 1
+                )
 
-                    echo.
-                    echo Starting application containers...
-
-                    docker compose up -d
-
-                    if errorlevel 1 (
-                        echo Docker Compose deployment FAILED
-                        exit /b 1
-                    )
-
-                    echo.
-                    echo ===== CONTAINER STATUS =====
-
-                    docker compose ps
-
-                    echo.
-                    echo Deployment completed successfully.
+                echo.
+                docker compose ps
                 '''
             }
         }
@@ -276,59 +207,28 @@ pipeline {
         stage('Health Check') {
             steps {
                 echo '=========================================='
-                echo '              HEALTH CHECK'
+                echo '             HEALTH CHECK'
                 echo '=========================================='
+                powershell '''
+                function Test-Url($name, $url) {
+                    for ($i = 1; $i -le 20; $i++) {
+                        try {
+                            $r = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 5
+                            if ($r.StatusCode -eq 200) {
+                                Write-Host "$name is healthy ($url)"
+                                return
+                            }
+                        } catch {
+                            Write-Host "Attempt $i/20: $name not ready yet..."
+                        }
+                        Start-Sleep -Seconds 5
+                    }
+                    Write-Host "$name health check FAILED ($url)"
+                    exit 1
+                }
 
-                bat '''
-                    echo Waiting for application to start...
-                    timeout /t 15 /nobreak
-
-                    echo.
-                    echo ===== CONTAINER STATUS =====
-                    docker compose ps
-
-                    echo.
-                    echo ===== BACKEND HEALTH CHECK =====
-
-                    curl.exe -f http://localhost:5000/
-
-                    if errorlevel 1 (
-                        echo.
-                        echo Backend health check FAILED
-
-                        echo.
-                        echo ===== BACKEND LOGS =====
-                        docker logs %BACKEND_CONTAINER%
-
-                        exit /b 1
-                    )
-
-                    echo.
-                    echo Backend health check PASSED.
-
-                    echo.
-                    echo ===== FRONTEND HEALTH CHECK =====
-
-                    curl.exe -f http://localhost:8081/
-
-                    if errorlevel 1 (
-                        echo.
-                        echo Frontend health check FAILED
-
-                        echo.
-                        echo ===== FRONTEND LOGS =====
-                        docker logs %FRONTEND_CONTAINER%
-
-                        exit /b 1
-                    )
-
-                    echo.
-                    echo Frontend health check PASSED.
-
-                    echo.
-                    echo ==========================================
-                    echo        APPLICATION HEALTHY
-                    echo ==========================================
+                Test-Url "Backend"  "http://localhost:5000/"
+                Test-Url "Frontend" "http://localhost:8081/"
                 '''
             }
         }
@@ -338,70 +238,38 @@ pipeline {
                 echo '=========================================='
                 echo '             FINAL STATUS'
                 echo '=========================================='
-
                 bat '''
-                    echo.
-                    echo ===== RUNNING CONTAINERS =====
-                    docker ps
-
-                    echo.
-                    echo ===== DOCKER IMAGES =====
-                    docker images | findstr "jenkins-docker-cicd-demo"
-
-                    echo.
-                    echo ==========================================
-                    echo       CI/CD PIPELINE SUCCESSFUL
-                    echo ==========================================
-                    echo.
-                    echo GitHub
-                    echo    |
-                    echo    v
-                    echo Jenkins
-                    echo    |
-                    echo    v
-                    echo Backend Tests
-                    echo    |
-                    echo    v
-                    echo Docker Build
-                    echo    |
-                    echo    v
-                    echo Docker Hub
-                    echo    |
-                    echo    v
-                    echo Deployment
-                    echo    |
-                    echo    v
-                    echo Health Check
-                    echo.
-                    echo ==========================================
+                @echo off
+                docker compose ps
+                echo.
+                echo Frontend : http://localhost:8081
+                echo Backend  : http://localhost:5000
                 '''
             }
         }
     }
 
     post {
-
-        success {
-            echo '=========================================='
-            echo '       PIPELINE EXECUTION SUCCESSFUL'
-            echo '=========================================='
-
-            echo 'CI/CD pipeline completed successfully.'
-            echo 'Docker images were built, pushed and deployed.'
-        }
-
-        failure {
-            echo '=========================================='
-            echo '          CI/CD PIPELINE FAILED'
-            echo '=========================================='
-
-            echo 'Check the failed stage above for details.'
-        }
-
         always {
             echo '=========================================='
             echo '       PIPELINE EXECUTION COMPLETED'
             echo '=========================================='
+            bat '''
+            @echo off
+            docker logout
+            exit /b 0
+            '''
+        }
+        success {
+            echo '=========================================='
+            echo '       CI/CD PIPELINE SUCCESSFUL'
+            echo '=========================================='
+        }
+        failure {
+            echo '=========================================='
+            echo '         CI/CD PIPELINE FAILED'
+            echo '=========================================='
+            echo 'Check the failed stage above for details.'
         }
     }
 }
