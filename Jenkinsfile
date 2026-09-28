@@ -76,18 +76,25 @@ pipeline {
             steps {
                 echo '===== DOCKER HUB LOGIN ====='
 
-                bat '''
-                    echo Logging in to Docker Hub...
-
-                    echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USERNAME% --password-stdin
-
-                    if errorlevel 1 (
-                        echo Docker Hub login FAILED
-                        exit /b 1
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'dockerhub-password',
+                        usernameVariable: 'DOCKER_USERNAME',
+                        passwordVariable: 'DOCKER_PASSWORD'
                     )
+                ]) {
+                    bat '''
+                        echo Logging in to Docker Hub...
+                        echo %DOCKER_PASSWORD% | docker login -u %DOCKER_USERNAME% --password-stdin
 
-                    echo Docker Hub login SUCCESSFUL
-                '''
+                        if errorlevel 1 (
+                            echo Docker Hub login FAILED
+                            exit /b 1
+                        )
+
+                        echo Docker Hub login SUCCESS
+                    '''
+                }
             }
         }
 
