@@ -173,7 +173,7 @@ pipeline {
 
 
         // ============================================================
-        // 5. TRIVY SECURITY SCAN
+        // 5. TRIVY SECURITY SCAN  (FIXED)
         // ============================================================
         stage('Trivy Security Scan') {
             steps {
@@ -209,11 +209,13 @@ pipeline {
 
                 docker run --rm ^
                     -v //var/run/docker.sock:/var/run/docker.sock ^
-                    -v "%WORKSPACE%\\trivy\\reports:/reports" ^
+                    -v trivy-cache:/root/.cache/ ^
                     aquasec/trivy:latest image ^
+                    --no-progress ^
+                    --scanners vuln ^
                     --format table ^
-                    --output /reports/backend-trivy-report.txt ^
-                    cicd-demo-backend:1.0
+                    --exit-code 0 ^
+                    cicd-demo-backend:1.0 > "trivy\\reports\\backend-trivy-report.txt"
 
                 if errorlevel 1 (
                     echo Backend Trivy scan encountered an error.
@@ -230,11 +232,13 @@ pipeline {
 
                 docker run --rm ^
                     -v //var/run/docker.sock:/var/run/docker.sock ^
-                    -v "%WORKSPACE%\\trivy\\reports:/reports" ^
+                    -v trivy-cache:/root/.cache/ ^
                     aquasec/trivy:latest image ^
+                    --no-progress ^
+                    --scanners vuln ^
                     --format table ^
-                    --output /reports/frontend-trivy-report.txt ^
-                    cicd-demo-frontend:1.0
+                    --exit-code 0 ^
+                    cicd-demo-frontend:1.0 > "trivy\\reports\\frontend-trivy-report.txt"
 
                 if errorlevel 1 (
                     echo Frontend Trivy scan encountered an error.
@@ -284,9 +288,7 @@ pipeline {
 
                     echo Logging in to Docker Hub...
 
-                    echo %DOCKER_PASSWORD% | docker login ^
-                        -u %DOCKER_USERNAME% ^
-                        --password-stdin
+                    docker login -u %DOCKER_USERNAME% -p %DOCKER_PASSWORD%
 
                     if errorlevel 1 (
                         echo.
@@ -327,20 +329,14 @@ pipeline {
 
                 echo Tagging backend image...
 
-                docker tag %BACKEND_IMAGE_LOCAL% ^
-                    %BACKEND_REPO%:latest
-
-                docker tag %BACKEND_IMAGE_LOCAL% ^
-                    %BACKEND_REPO%:%IMAGE_TAG%
+                docker tag %BACKEND_IMAGE_LOCAL% %BACKEND_REPO%:latest
+                docker tag %BACKEND_IMAGE_LOCAL% %BACKEND_REPO%:%IMAGE_TAG%
 
                 echo.
                 echo Tagging frontend image...
 
-                docker tag %FRONTEND_IMAGE_LOCAL% ^
-                    %FRONTEND_REPO%:latest
-
-                docker tag %FRONTEND_IMAGE_LOCAL% ^
-                    %FRONTEND_REPO%:%IMAGE_TAG%
+                docker tag %FRONTEND_IMAGE_LOCAL% %FRONTEND_REPO%:latest
+                docker tag %FRONTEND_IMAGE_LOCAL% %FRONTEND_REPO%:%IMAGE_TAG%
 
                 if errorlevel 1 (
                     echo.
