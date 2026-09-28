@@ -539,6 +539,13 @@ pipeline {
         // 11. DOCKER IMAGE CLEANUP  (NEW)
         //
         // Runs only after a successful deployment + health check.
+        // Safe by design:
+        //   - never uses "prune -a", so your other projects' images
+        //     (bookhub, restaurant, etc.) and the Trivy image are kept
+        //   - never touches images used by running containers
+        //   - keeps ":latest" and the current build's tag, removes
+        //     older build-number tags of THIS project only
+        //   - always exits 0, so cleanup can never fail the pipeline
         // ============================================================
         stage('Docker Image Cleanup') {
             steps {
@@ -645,6 +652,55 @@ pipeline {
                 echo ==========================================
                 echo        CI/CD PIPELINE COMPLETED
                 echo ==========================================
+                '''
+            }
+        }
+
+
+        // ============================================================
+        // 13. ROLLBACK INFORMATION  (NEW)
+        //
+        // Informational only: it does NOT change the running
+        // deployment. It documents the current version and how to
+        // roll back to an earlier Jenkins build tag.
+        // ============================================================
+        stage('Rollback Information') {
+            steps {
+                echo '=========================================='
+                echo '          ROLLBACK INFORMATION'
+                echo '=========================================='
+
+                bat '''
+                @echo off
+
+                echo.
+                echo Current Jenkins Build:
+                echo %BUILD_NUMBER%
+
+                echo.
+                echo Current Docker Images:
+                docker images %BACKEND_REPO%
+                docker images %FRONTEND_REPO%
+
+                echo.
+                echo ==========================================
+                echo ROLLBACK PROCEDURE
+                echo ==========================================
+                echo.
+                echo To rollback, use a previous Jenkins build tag.
+                echo Older tags are kept on Docker Hub even though
+                echo the cleanup stage removes them from this machine.
+                echo.
+                echo Example:
+                echo docker pull %BACKEND_REPO%:PREVIOUS_BUILD
+                echo docker pull %FRONTEND_REPO%:PREVIOUS_BUILD
+                echo.
+                echo Then update docker-compose.yml to use
+                echo the required previous image tag.
+                echo.
+                echo Rollback information displayed successfully.
+
+                exit /b 0
                 '''
             }
         }
