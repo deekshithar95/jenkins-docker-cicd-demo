@@ -43,4 +43,4 @@ http://localhost:8081
 
 ## Stop Application
 
-docker compose down
+docker compose downAutomatic Jenkins CI/CD test
